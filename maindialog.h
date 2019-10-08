@@ -67,6 +67,7 @@ private:
     int    msecInterval;
     int    secTotTime;
     int    imageNum;
+    int    stepNum;
 
     QString sNormalStyle;
     QString sErrorStyle;

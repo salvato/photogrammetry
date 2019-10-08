@@ -14,6 +14,7 @@
 
 #define MIN_INTERVAL 1500 // in ms (depends on the image format: jpeg is HW accelerated !)
 #define IMAGE_QUALITY 100 // 100 is Best quality
+#define STEP_PER_TURN 48  // Number of steps per turn
 
 
 // ================================================
@@ -22,11 +23,12 @@
 // +5V on pins 2 or 4 in the 40 pin GPIO connector.
 // GND on pins 6, 9, 14, 20, 25, 30, 34 or 39
 // in the 40 pin GPIO connector.
+// See: https://pinout.xyz/
 // ================================================
 #define LED_PIN  23 // BCM23 is Pin 16 in the 40 pin GPIO connector.
-#define STEP_PIN 14 // BCM14 is Pin  8 in the 40 pin GPIO connector.
-#define DIR_PIN  26 // BCM26 IS Pin 37 in the 40 pin GPIO connector.
-#define ENA_PIN  15
+#define STEP_PIN 17 // BCM17 is Pin 11 in the 40 pin GPIO connector.
+#define DIR_PIN  27 // BCM27 IS Pin 13 in the 40 pin GPIO connector.
+#define ENA_PIN  22 // BCM22 IS Pin 15 in the 40 pin GPIO connector.
 
 
 MainDialog::MainDialog(QWidget *parent)
@@ -384,24 +386,21 @@ MainDialog::gpioInit() {
                               QString("Non riesco ad inizializzare la GPIO."));
         return false;
     }
-    // Led On/Off Control
-    iResult = set_mode(gpioHostHandle, ledPin, PI_OUTPUT);
+    iResult  = set_mode(gpioHostHandle, ledPin,  PI_OUTPUT);
+    iResult += set_mode(gpioHostHandle, stepPin, PI_OUTPUT);
+    iResult += set_mode(gpioHostHandle, dirPin,  PI_OUTPUT);
+    iResult += set_mode(gpioHostHandle, enaPin,  PI_OUTPUT);
+    iResult += set_pull_up_down(gpioHostHandle, ledPin,  PI_PUD_UP);
+    iResult += set_pull_up_down(gpioHostHandle, stepPin, PI_PUD_UP);
+    iResult += set_pull_up_down(gpioHostHandle, dirPin,  PI_PUD_UP);
+    iResult += set_pull_up_down(gpioHostHandle, enaPin,  PI_PUD_UP);
     if(iResult < 0) {
         QMessageBox::critical(this,
                               QString("pigpiod Error"),
-                              QString("Unable to initialize GPIO%1 as Output")
-                                   .arg(ledPin));
+                              QString("Unable to set GPIO Pins"));
         return false;
     }
-
-    iResult = set_pull_up_down(gpioHostHandle, ledPin, PI_PUD_UP);
-    if(iResult < 0) {
-        QMessageBox::critical(this,
-                              QString("pigpiod Error"),
-                              QString("Unable to set GPIO%1 Pull-Up")
-                                   .arg(ledPin));
-        return false;
-    }
+    gpio_write(gpioHostHandle, dirPin, 1);
     return true;
 }
 
@@ -467,6 +466,7 @@ MainDialog::on_startButton_clicked() {
         pUi->statusBar->setText((QString("Error: Check Values !")));
         return;
     }
+    stepNum = 0;
     switchLampOff();
     intervalTimer.start(msecInterval);
 
@@ -558,15 +558,24 @@ MainDialog::on_nameEdit_textChanged(const QString &arg1) {
 void
 MainDialog::onTimeToGetNewImage() {
     switchLampOn();
+    int angle = int(0.5+(360.0/STEP_PER_TURN)*stepNum);
     QThread::msleep(10);
     QString sFileName = QString("%1/%2_%3.jpg")
             .arg(sBaseDir)
             .arg(sOutFileName)
-            .arg(imageNum, 4, 10, QLatin1Char('0'));
+            .arg(angle, 3, 10, QLatin1Char('0'));
     pCamera->capture(sFileName);
     QThread::msleep(300);
     switchLampOff();
-    imageNum++;
+    gpio_write(gpioHostHandle, enaPin, 1);
+    QThread::msleep(1);
+    gpio_write(gpioHostHandle, stepPin, 1);
+    QThread::msleep(1);
+    gpio_write(gpioHostHandle, stepPin, 0);
+    gpio_write(gpioHostHandle, enaPin, 0);
+    stepNum++;
+    if(stepNum > STEP_PER_TURN)
+        on_stopButton_clicked();
 }
 
 
